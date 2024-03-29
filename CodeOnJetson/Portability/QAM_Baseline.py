@@ -1,0 +1,71 @@
+import numpy as np
+import scipy.io as scio
+import scipy.signal as scsig
+import time
+
+# The baseline will use the scipy signal library to generate signal
+
+# load symbol data
+
+def GenerateSymbolMat(MatFile,MatName):
+    Symbol_file = scio.loadmat(MatFile)
+    Symbol_batch = Symbol_file[MatName]
+    _batch_size = Symbol_batch.shape[0]
+    _signal_dimension = Symbol_batch.shape[1]
+    _symbol_length = Symbol_batch.shape[2]
+    _complex_symbol = np.iscomplexobj(Symbol_batch)
+    if _complex_symbol:
+        print("Input has complex symbols!")
+        Symbol_batch_real = np.real(Symbol_batch)
+        Symbol_batch_imag = np.imag(Symbol_batch)
+        Symbol_batch_mat = np.concatenate((Symbol_batch_real,Symbol_batch_imag), axis = 1).astype('float32')
+    else:
+        print("Input has real symbols!")
+        Symbol_batch_mat = Symbol_batch.astype('float32')
+    # Symbol_batch_tensor = torch.tensor(Symbol_batch_mat)
+    return Symbol_batch_mat, _complex_symbol, _batch_size, _signal_dimension, _symbol_length
+
+# QAM
+SymbolFilePath = './InputSymbol/QAMSymbol_batch_test.mat'
+SymbolMat = 'QAMSymbol_batch_test'
+QAM_symbol_file = Symbol_file = scio.loadmat(SymbolFilePath)
+# QAM_symbol_slice = QAM_symbol_file['QAMSymbol_batch_test']
+QAM_symbol_slice, complex_symbol, batch_size, signal_dimension, symbol_length = GenerateSymbolMat(SymbolFilePath, SymbolMat)
+# print(QAM_symbol_slice.shape)
+
+# load fir taps
+fir_taps_file = scio.loadmat("./InputSymbol/rrc_filter_taps.mat")
+filter_taps = fir_taps_file["rrc_filter_taps"]
+samples_per_symbol = 4
+
+
+lengthRepeat = np.array([1,2,4])
+timeRecord = np.zeros((3,))
+iterations = 120
+batchSize = np.array([1,8,16,32,64])
+
+for BatchSizeIdx in range(5):
+    tmp_batch_size = batchSize[BatchSizeIdx]
+    tmp_symbol_batch = QAM_symbol_slice[:tmp_batch_size,:]
+    for SymLenIdx in range(3):
+        repeatFactor = lengthRepeat[SymLenIdx]
+        tmp_symbol_real = np.repeat(tmp_symbol_batch[:,0,:],repeatFactor,axis=1)
+        tmp_symbol_imag = np.repeat(tmp_symbol_batch[:,1,:],repeatFactor,axis=1)
+        # print("Current length of symbol sequence is", tmp_symbol_real.shape[1])
+        tmpRunningTime = np.zeros((iterations,))
+        # Average time from 120-20=100 iterations
+        for iterIdx in range(iterations):
+            batch_start = time.time()
+            for batch_idx in range(tmp_batch_size):
+                # Upsampling
+                upsampled_symbol_real = np.zeros((tmp_symbol_real.shape[1]*samples_per_symbol-samples_per_symbol+1,),dtype='float64')
+                upsampled_symbol_imag = np.zeros((tmp_symbol_imag.shape[1]*samples_per_symbol-samples_per_symbol+1,),dtype='float64')
+                upsampled_symbol_real[::samples_per_symbol] = tmp_symbol_real[batch_idx,:]
+                upsampled_symbol_imag[::samples_per_symbol] = tmp_symbol_imag[batch_idx,:]
+                # Shape filtering
+                waveform_real = scsig.convolve(filter_taps.squeeze(),upsampled_symbol_real)
+                waveform_imag = scsig.convolve(filter_taps.squeeze(),upsampled_symbol_imag)
+            batch_end = time.time()
+            tmpRunningTime[iterIdx] = (batch_end-batch_start)*1000
+        timeRecord[SymLenIdx] = np.average(tmpRunningTime[20:])
+    print("Current batch size is",tmp_batch_size, "running time of different length are", timeRecord, "ms")
