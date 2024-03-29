@@ -1,5 +1,7 @@
 # NN-defined Modulator
 ## Overview
+This is the code repository for paper *NN-Defined Modulator: Reconfigurable and Portable Software Modulator on IoT Gateways* in NSDI'24.
+## Structure
 The repository contains the majority of the implementation of NN-defined modulators. 
 * All three `.ipynb` files in the root directory have the NN-defined modulator template, named as `ModulatorNet()`.
   * The development requires `PyTorch` library and some other commonly-used python modules, like `SciPy`and `NumPy`.
